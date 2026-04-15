@@ -1,39 +1,44 @@
 Clan Wars Multi Tracker
 
-Tracks multi-target PvP performance in with per-player damage breakdowns, ZGS special attack accuracy, and Ice Barrage freeze success rates.
+Tracks multi-target PvP performance in Clan Wars, including per-player damage, ZGS special attack accuracy, and Ice Barrage freeze success rates.
 
-## Features
+---
 
-- Tracks damage dealt to each player in real time  
-- Displays per-target totals in a clean side panel  
-- Includes an estimated value based on damage dealt  
-- Sorts players by highest damage  
-- Reset individual players or all data  
-- Automatically resets when a new round starts
+### Features
 
-## Features
+**Multi-target tracking**
 
-- Multi-target tracking
-- Tracks damage and stats for multiple opponents simultaneously. Stats are preserved when switching targets.
-- ZGS special attack tracking
+* Track damage dealt to multiple opponents in real time
+* Per-target totals displayed in a side panel
+* Players sorted by highest damage
+* Stats persist when switching targets
 
-- Total specs thrown
-- Hit accuracy percentage per player
+**Zamorak Godsword (ZGS) tracking**
 
-## Ice Barrage tracking
+* Total special attacks used per player
+* Estimated Hit accuracy percentage per target
 
-- Total casts per player
-- Estimated Freeze success rate percentage
-- Lifetime totals 
+**Ice Barrage tracking**
 
-## Per-player controls
+* Total casts per player
+* Estimated freeze success rate
 
-- Reset damage for a single target
-- Wipe spec/freeze stats for a single target
-- Reset all stats globally
+**Controls**
 
-## Notes
+* Reset stats for individual players
+* Reset all tracked data
 
-- Designed specifically for Clan Wars PvP
-- Lifetime stats persist across sessions and are saved roughly every 30 seconds
-- Stats displayed in the side panel under the navigation bar
+**Automatic reset**
+
+* Automatically resets when a new Clan Wars round starts
+
+**Persistence**
+
+* Lifetime stats saved across sessions (~30-second intervals)
+
+---
+
+### Notes
+
+* Designed specifically for Clan Wars PvP
+* Stats are displayed in the side panel
