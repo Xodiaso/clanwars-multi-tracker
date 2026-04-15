@@ -10,13 +10,13 @@ import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Player;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.AnimationChanged;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.HitsplatID;
-import net.runelite.api.widgets.Widget;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -38,10 +38,6 @@ import java.util.Map;
 )
 public class ClanwarsTrackerPlugin extends Plugin
 {
-	// Widget 269:17 is the Clan Wars round timer displayed during a fight
-	private static final int TIMER_GROUP = 269;
-	private static final int TIMER_CHILD = 17;
-
 	private static final int ZGS_SPEC_ANIM      = 7638;
 	private static final int ICE_BARRAGE_ANIM   = 1979;
 	private static final int SPEC_RESOLVE_TICKS = 4;
@@ -91,9 +87,12 @@ public class ClanwarsTrackerPlugin extends Plugin
 	private final Map<String, ZgsState> pendingZgsSpec = new HashMap<>();
 
 	// Freeze / immunity state per target name
-	private final Map<String, Integer> freezeEndTick = new HashMap<>();
-	private final Map<String, Integer> immuneEndTick = new HashMap<>();
-	private final Map<String, Actor>   frozenActors  = new HashMap<>();
+	private final Map<String, Integer>    freezeEndTick   = new HashMap<>();
+	private final Map<String, Integer>    immuneEndTick   = new HashMap<>();
+	// Stores a WorldPoint snapshot (not a live Actor reference) of where the target
+	// was when frozen, so we can do plane-aware early-break detection without
+	// holding a stale Actor reference across floor transitions.
+	private final Map<String, WorldPoint> frozenLocations = new HashMap<>();
 
 	private Role currentRole = Role.NONE;
 
@@ -105,8 +104,6 @@ public class ClanwarsTrackerPlugin extends Plugin
 	// Dirty flag + tick counter to throttle disk writes
 	private boolean statsDirty        = false;
 	private int     ticksSinceLastSave = 0;
-
-	private String lastTimerText = "";
 
 	// -------------------------------------------------------
 	// Freeze helpers
@@ -127,36 +124,49 @@ public class ClanwarsTrackerPlugin extends Plugin
 		int now = client.getTickCount();
 		freezeEndTick.put(name, now + FREEZE_DURATION);
 		immuneEndTick.put(name, now + IMMUNE_DURATION);
-		frozenActors.put(name, actor);
-	}
-
-	/**
-	 * OSRS uses Chebyshev distance (the max of |dx|, |dy|) for tile-based range checks.
-	 */
-	private boolean isInFreezeRange(Actor target)
-	{
-		Player local = client.getLocalPlayer();
-		if (local == null || target == null) return false;
-		int dx = Math.abs(local.getWorldLocation().getX() - target.getWorldLocation().getX());
-		int dy = Math.abs(local.getWorldLocation().getY() - target.getWorldLocation().getY());
-		return Math.max(dx, dy) <= MAX_FREEZE_RANGE;
+		// Snapshot the WorldPoint — plain value object, never goes stale
+		frozenLocations.put(name, actor.getWorldLocation());
 	}
 
 	private void checkFreezeBreaks()
 	{
-		if (frozenActors.isEmpty()) return;
-		for (Map.Entry<String, Actor> entry : frozenActors.entrySet())
+		if (frozenLocations.isEmpty()) return;
+		Player local = client.getLocalPlayer();
+		if (local == null) return;
+
+		Iterator<Map.Entry<String, WorldPoint>> it = frozenLocations.entrySet().iterator();
+		while (it.hasNext())
 		{
-			String name  = entry.getKey();
-			Actor  actor = entry.getValue();
-			if (!isFrozen(name)) continue;
-			if (!isInFreezeRange(actor))
+			Map.Entry<String, WorldPoint> entry = it.next();
+			String     name      = entry.getKey();
+			WorldPoint frozenAt  = entry.getValue();
+
+			// Clean up entries whose freeze has already expired naturally
+			if (!isFrozen(name))
+			{
+				it.remove();
+				continue;
+			}
+
+			// Only attempt an early break if we are on the same plane as the target.
+			// If we're on a different floor we cannot observe the target moving, so
+			// the freeze timer should keep running undisturbed.
+			if (local.getWorldLocation().getPlane() != frozenAt.getPlane())
+			{
+				continue;
+			}
+
+			int dx = Math.abs(local.getWorldLocation().getX() - frozenAt.getX());
+			int dy = Math.abs(local.getWorldLocation().getY() - frozenAt.getY());
+			boolean outOfRange = Math.max(dx, dy) > MAX_FREEZE_RANGE;
+
+			if (outOfRange)
 			{
 				freezeEndTick.remove(name);
 				immuneEndTick.put(name, client.getTickCount() + FREEZE_BREAK_IMMUNE);
+				it.remove();
 			}
 		}
-		frozenActors.entrySet().removeIf(e -> !isFrozen(e.getKey()) && !isImmune(e.getKey()));
 	}
 
 	// -------------------------------------------------------
@@ -210,7 +220,7 @@ public class ClanwarsTrackerPlugin extends Plugin
 		pendingZgsSpec.clear();
 		freezeEndTick.clear();
 		immuneEndTick.clear();
-		frozenActors.clear();
+		frozenLocations.clear();
 	}
 
 	// -------------------------------------------------------
@@ -289,22 +299,6 @@ public class ClanwarsTrackerPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		// Reset on Clan Wars round start (timer resets to 20:00)
-		Widget timerWidget = client.getWidget(TIMER_GROUP, TIMER_CHILD);
-		if (timerWidget != null && !timerWidget.isHidden())
-		{
-			String timerText = timerWidget.getText();
-			if (timerText != null && timerText.equals("20:00") && !lastTimerText.equals("20:00"))
-			{
-				resetAll();
-			}
-			lastTimerText = timerText != null ? timerText : "";
-		}
-		else
-		{
-			lastTimerText = "";
-		}
-
 		checkFreezeBreaks();
 
 		// Tick down pending ZGS specs; unresolved ones become splashes
@@ -532,7 +526,7 @@ public class ClanwarsTrackerPlugin extends Plugin
 		barrageFreezesPerPlayer.remove(targetName);
 		freezeEndTick.remove(targetName);
 		immuneEndTick.remove(targetName);
-		frozenActors.remove(targetName);
+		frozenLocations.remove(targetName);
 		panel.updateDamage(
 				new HashMap<>(damageMap),
 				new HashMap<>(zgsHitsPerPlayer),
@@ -553,7 +547,7 @@ public class ClanwarsTrackerPlugin extends Plugin
 		pendingZgsSpec.clear();
 		freezeEndTick.clear();
 		immuneEndTick.clear();
-		frozenActors.clear();
+		frozenLocations.clear();
 		lifetimeZgsSpecs       = 0;
 		lifetimeZgsHits        = 0;
 		lifetimeBarrageCasts   = 0;

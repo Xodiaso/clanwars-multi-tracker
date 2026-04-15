@@ -346,12 +346,24 @@ public class ClanwarsTrackerPanel extends PluginPanel
             infoPanel.add(specLine1);
         }
 
+        // Reset button — no confirmation, wipes damage count only
         JButton resetBtn = new JButton("Reset");
         resetBtn.addActionListener(e -> plugin.resetTarget(name));
         styleButton(resetBtn, COLOR_RED_BTN);
 
+        // Wipe Stats button — confirmation required before wiping spec/barrage data
         JButton wipeStatsBtn = new JButton("Wipe Stats");
-        wipeStatsBtn.addActionListener(e -> plugin.resetSpecData(name));
+        wipeStatsBtn.addActionListener(e ->
+        {
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "Wipe spec/barrage stats for " + name + "?",
+                    "Wipe Stats",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (confirm == JOptionPane.YES_OPTION) plugin.resetSpecData(name);
+        });
         styleButton(wipeStatsBtn, COLOR_BLUE_BTN);
 
         JPanel btnPanel = new JPanel();
