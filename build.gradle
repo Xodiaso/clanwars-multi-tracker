@@ -14,7 +14,7 @@ repositories {
 }
 
 def runeLiteVersion = 'latest.release'
-def pluginMainClass = 'com.example.ExamplePluginTest'
+def pluginMainClass = 'com.clanwarstracker.ClanwarsTrackerPluginTest'
 
 dependencies {
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
@@ -41,6 +41,13 @@ tasks.register('run', JavaExec) {
 
 	jvmArgs "-ea"
 	args "--developer-mode", "--debug"
+
+	doFirst {
+		classpath = classpath.filter { file ->
+			!file.name.contains('natives-linux') &&
+					!file.name.contains('natives-macos')
+		}
+	}
 }
 
 tasks.register('shadowJar', Jar) {
@@ -67,4 +74,9 @@ tasks.register('shadowJar', Jar) {
 	group = BasePlugin.BUILD_GROUP
 	archiveClassifier.set('shadow')
 	archiveFileName.set("${rootProject.name}-${project.version}-all.jar")
+}
+
+repositories {
+	mavenCentral()
+	maven { url = 'https://repo.runelite.net' }
 }
