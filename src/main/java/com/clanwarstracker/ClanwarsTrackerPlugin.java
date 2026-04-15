@@ -33,7 +33,7 @@ import java.util.Map;
 @Slf4j
 @PluginDescriptor(
 		name = "Clan Wars Multi Tracker",
-		description = "Tracks multi-target PvP performance in Clan Wars, including ZGS special attack accuracy and Ice Barrage freeze success rates",
+		description = "Tracks multi-target PvP performance in Clan Wars, including ZGS special attack accuracy",
 		tags = {"pvp", "clanwars", "tracker", "multi-target"}
 )
 public class ClanwarsTrackerPlugin extends Plugin
